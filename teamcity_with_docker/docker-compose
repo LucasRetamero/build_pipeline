@@ -1,0 +1,66 @@
+version: '2'
+services:
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - $HOME/dockervolumes/nginx/certs:/etc/nginx/certs:ro
+      - $HOME/dockervolumes/nginx/vhost:/etc/nginx/vhost.d
+      - /usr/share/nginx/html
+    environment:
+      - DEFAULT_HOST=localhost:8111
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion:v1.12
+    container_name: letsencrypt
+    restart: always
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+    volumes:
+      - $HOME/dockervolumes/nginx/certs:/etc/nginx/certs:rw
+    volumes_from:
+      - nginx-proxy
+  teamcity:
+     image: jetbrains/teamcity-server:2020.1
+     container_name: jetbrains-teamcity
+     volumes:
+       - ./dockervolumes/teamcity/data:/data/teamcity_server/datadir
+       - ./dockervolumes/teamcity/logs:/opt/teamcity/logs
+     environment:
+       - SERVER_URL=localhost:8111
+       - VIRTUAL_HOST=localhost:8111
+       - LETSENCRYPT_HOST=localhost:8111
+       - LETSENCRYPT_EMAIL=lucasretamerogimenes@gmail.com
+     depends_on:
+       - postgres
+  postgres:
+    image: postgres:10
+    volumes:
+     - ./dockervolumes/postgress/srv/postgresql/data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=luc@1234
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=teamcity
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+  teamcity_agent1:
+    image: jetbrains/teamcity-agent:2020.1
+    container_name: teamcity-agent-1
+    user: root
+    volumes:
+      - $HOME/agent1/conf:/data/teamcity_agent/conf
+      - $HOME/agent1/volumes:/var/lib/docker
+    environment:
+      - SERVER_URL=https://localhost:8111
+      - DOCKER_IN_DOCKER=start
+    privileged: true
+    depends_on:
+      - teamcity
+volumes:
+  dockervolumes:
